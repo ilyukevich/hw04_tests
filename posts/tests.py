@@ -53,7 +53,6 @@ class ProfileTest(TestCase):
         """An authorized user can edit his post and its content will change on all linked pages"""
         self.client.post('/auth/login/', {'username': 'sarah', 'password': '12345'})
         self.client.post(reverse("post_edit", args=[self.user.username, self.post.id]), {"text": "GOOD"})
-        p = self.post.id
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "GOOD")
