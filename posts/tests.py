@@ -1,64 +1,93 @@
+# с тестами работал все ночь, поэтому думаю где-то перемудрил
+# прошу понять и простить и за переменные в том числе:)
+
 from django.test import TestCase, Client
-from .models import Post, User
+from .models import Group, Post, User
 from django.urls import reverse
 
 
 class ProfileTest(TestCase):
     def setUp(self):
         self.client = Client()
-        self.user = User.objects.create_user(
-            username="sarah",
-            email="connor.s@skynet.com",
-            password="12345"
-        )
-        self.post = Post.objects.create(
-            text="test_text",
-            author=self.user
-        )
+        self.client2 = Client()
+        self.user = User.objects.create_user(username="sarah")
+        self.user2 = User.objects.create_user(username="anonimus")
+        self.group = Group.objects.create(title="titlejust", slug="just", description="description1")
+        self.client.force_login(self.user)
+
+
+    def search(self, post):
+        """проверка наличия поста на всех нужных страницах"""
+        # проверка, что новая запись появилась на всех связанных страницах
+        value = post
+        for url in (
+            reverse("index"),
+            reverse("profile", kwargs={"username": self.user}),
+            reverse("post", kwargs={"username": self.user, "post_id": self.post.id}),
+            reverse("group", kwargs={"slug": self.group.slug})
+        ):
+            response = self.client.get(url)
+            self.assertContains(response, value)
+
+
+    def check(self, post):
+        """проверка всех полей из контекста"""
+        post = Post.objects.get(author=self.user, id=self.post.id)
+        value = post
+        self.assertEqual(post.text, value.text)
+        self.assertEqual(post.author, value.author)
+        self.assertEqual(post.group, value.group)
 
 
     def test_personal_page(self):
         """After registering a user, his personal page (profile) is created"""
-        profile = self.client.get("/sarah/")
-        self.assertEqual(profile.status_code, 200)
-        self.assertContains(profile, "sarah")
+        response = self.client.get(reverse("profile", args=[self.user]))
+        self.assertEqual(response.status_code, 200)
 
-
-    def test_create_post(self):
+    # В тесте на публикацию поста авторизованным пользователем проверяем группу автора текст
+    # и количество постов в базе. Проверяя количество постов в базе используем метод.count().
+    def test_create_post_auth(self):
         """test_create_post"""
         # An authorized user can publish a post (new)
-        self.client.post('/auth/login/', {'username': 'sarah', 'password': '12345'})
-        new_post = self.client.get("/new/", follow=True)
-        self.assertEqual(new_post.status_code, 200)
-        self.assertTemplateUsed(new_post, "new.html")
+        posts_count_now = Post.objects.filter(author=self.user).count()
+        self.post = Post.objects.create(
+            text="just test text",
+            author=self.user, group=self.group)
+        posts_count_last = Post.objects.filter(author=self.user).count()
+        self.assertEqual(posts_count_last, posts_count_now + 1)
+        response = self.client.get(reverse("profile", args=[self.user]))
+        self.assertEqual(len(response.context["author_posts"]), 1)
+        self.assertContains(response, self.post.text)
+        self.assertContains(response, self.post.group)
+        # проверка наличия поста на всех нужных страницах
+        value = self.post.text
+        self.search(value)
+        # проверка всех полей из контекста
+        self.check(self.post)
 
-        # An unauthorized visitor cannot publish a post (it is redirected to the login page)
-        self.client.logout()
-        response = self.client.get("/new/")
+
+    def test_create_post_unauth(self):
+        """test_create_post"""
+        # An unauthorized user can publish a post (new)
+        posts_count_now = Post.objects.filter(author=self.user2).count()
+        response = self.client2.post("/new/",
+            text="just test text",
+            author=self.user, group=self.group, follow=True)
+        posts_count_last = Post.objects.filter(author=self.user).count()
+        self.assertEqual(posts_count_last, posts_count_now)
         self.assertRedirects(response, '/auth/login/?next=/new/')
 
 
-    def test_publication(self):
-        """After the post is published, a new post appears on the main page of the site (index), on the user's
-        personal page (profile), and on a separate post page (post)"""
-        response = self.client.get("/")
-        self.assertContains(response, self.post.text)
-        response = self.client.get(reverse("profile", args=[self.user.username]))
-        self.assertContains(response, self.post.text)
-        response = self.client.get(reverse("post", args=[self.user.username, self.post.id]))
-        self.assertContains(response, self.post.text)
-
-
     def test_edit(self):
-        """An authorized user can edit his post and its content will change on all linked pages"""
-        self.client.post('/auth/login/', {'username': 'sarah', 'password': '12345'})
-        self.client.post(reverse("post_edit", args=[self.user.username, self.post.id]), {"text": "GOOD"})
-        response = self.client.get("/")
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "GOOD")
-        response = self.client.get("/sarah/")
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "GOOD")
-        response = self.client.get("/sarah/1/")
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "GOOD")
+        self.post = Post.objects.create(
+             text="just test text11111",
+             author=self.user, group=self.group)
+        response = self.client.post(
+            reverse("post_edit",
+                    kwargs={"username": self.user,
+                            "post_id": self.post.id, }),
+                    {'text': 'New text'})
+        post_get = Post.objects.get(author=self.user, id=self.post.id)
+        self.assertEqual(response.status_code, 302)
+        value = post_get.text
+        self.check(response)

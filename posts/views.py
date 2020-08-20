@@ -44,7 +44,7 @@ def new_post(request):
             return redirect('/')
 
     form = PostForm()
-    return render(request, 'new.html', {'form': form})
+    return render(request, 'new_post.html', {'form': form})
 
 
 # close pages from unauthorized users
@@ -54,25 +54,23 @@ def post_edit(request, username, post_id):
     post = get_object_or_404(Post, id=post_id)
     if profile != request.user:
         return redirect("post", username=post.author, post_id=post_id)
-    else:
-        if request.method == 'POST':
-            form = PostForm(request.POST)
-            if form.is_valid():
-                edit_post = form.save(commit=False)
-                edit_post.author = post.author
-                edit_post.id = post.id
-                edit_post.pub_date = post.pub_date
-                edit_post.save()
-                return redirect("post", username=post.author, post_id=post_id)
-        else:
-            form = PostForm(instance=post)
-        context = {
-            "form": form,
-            "post": post,
-            "username": username,
-            "post_id": post_id,
-            }
-        return render(request, "new.html", context)
+
+    form = PostForm(request.POST or None, instance=post)
+    if form.is_valid():
+        edit_post = form.save(commit=False)
+        edit_post.author = post.author
+        edit_post.id = post.id
+        edit_post.pub_date = post.pub_date
+        edit_post.save()
+        return redirect("post", username=post.author, post_id=post_id)
+
+    context = {
+        "form": form,
+        "post": post,
+        "username": username,
+        "post_id": post_id,
+        }
+    return render(request, "new_post.html", context)
 
 
 def profile(request, username):
