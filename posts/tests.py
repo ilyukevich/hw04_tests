@@ -1,6 +1,3 @@
-# благодарен за ревью всего этого)
-
-
 from django.test import TestCase, Client
 from .models import Group, Post, User
 from django.urls import reverse
